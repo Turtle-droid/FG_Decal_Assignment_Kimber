@@ -1,0 +1,488 @@
+using UnityEngine;
+using System.Collections.Generic;
+#if UNITY_EDITOR
+using UnityEditor;
+#endif
+using DG.Tweening;
+using UnityEngine.Serialization;
+using DidSeeSomething = NPCBasicSecurityBot.DidSeeSomething;
+using VisionToObject = NPC.VisionToObject;
+using MeleeType = UnarmedStateBSB.MeleeType;
+
+[System.Serializable]
+public class FiringStateBSB : BSBState, INPCState 
+{
+	float aimShakeMin;
+	float aimShakeMax;
+
+	float aimAcceleration;
+	float aimMaxSpeed;
+	float aimMaxForce;
+	float aimGain;
+	
+	float aimLerpSpeed;
+
+	public float tryMoveTimeMin = 1.5f;
+	public float tryMoveTimeMax = 10f;
+
+	float shakynessLerpSpeed;
+	float aimDotTest;
+
+	public AimParams defaultAimParams = new AimParams(0.01f, 0.3f, 7f, 12f, 25f, 16f, 4.8f, 1f, 0.995f);
+	[System.Serializable]
+	public struct AimParams {
+		public float aimShakeMin;
+		public float aimShakeMax;
+
+		public float aimAcceleration;
+		public float aimMaxSpeed;
+		public float aimMaxForce;
+		public float aimGain;
+
+		public float aimLerpSpeed;
+		
+		public float shakynessLerpSpeed;
+		public float aimDotTest;
+
+		public AimParams(float aimShakeMin, float aimShakeMax, float aimAcceleration, float aimMaxSpeed, float aimMaxForce, float aimGain, float aimLerpSpeed, float shakynessLerpSpeed, float aimDotTest) {
+			this.aimShakeMin = aimShakeMin;
+			this.aimShakeMax = aimShakeMax;
+			this.aimAcceleration = aimAcceleration;
+			this.aimMaxSpeed = aimMaxSpeed;
+			this.aimMaxForce = aimMaxForce;
+			this.aimGain = aimGain;
+			this.aimLerpSpeed = aimLerpSpeed;
+			this.shakynessLerpSpeed = shakynessLerpSpeed;
+			this.aimDotTest = aimDotTest;
+		}
+	}
+	[System.Serializable]
+	public struct AimParamOverride {
+		public DifficultyLevel difficultyOverride;
+		public AimParams aimParams;
+	}
+
+	public AimParamOverride[] aimParamDifficultyOverrides;
+
+	//public Transform gunOffsetTransformRight;
+	//public Transform gunOffsetTransformLeft;
+
+	[Header("Reactions")]
+	public Color eyeCameraColor;
+
+	MeleeType meleeing = MeleeType.None;
+	
+	Vector3 seenAtPos = Vector3.zero;
+	Vector3 seenOriginAtPos = Vector3.zero;
+	float visionObstructedStamp = -1f;
+	float tryMoveTime;
+	float shakynessT;
+	//private float waitTime;
+
+	WeaponBase weapon;
+	bool waitForAiming;
+	bool heldWeapon;
+
+	public void OnHeardSomething(Vector3 audioPosition, float soundDistance, NPC.SoundTag tag) { }
+	public void OnHeardSomething(Transform audioTransform, float soundDistance, NPC.SoundTag tag) { }
+	public void OnVisualCue(Transform t, float visualDistance = 20, NPC.VisualTag tag = NPC.VisualTag.Normal) { }
+	public void OnVisualCue(Vector3 pos, float visualDistance = 20, NPC.VisualTag tag = NPC.VisualTag.Normal) { }
+	
+	public void Start(){
+		UpdateAimParams();
+	}
+
+	public void UpdateAimParams() {
+		AimParams aimParams = defaultAimParams;
+		for(int i = 0; i < aimParamDifficultyOverrides.Length; i++) {
+			if (aimParamDifficultyOverrides[i].difficultyOverride == ConfigSlot.difficultyLevel.value) {
+				aimParams = aimParamDifficultyOverrides[i].aimParams;
+			}
+		}
+		aimShakeMin = aimParams.aimShakeMin;
+		aimShakeMax = aimParams.aimShakeMax;
+
+		aimAcceleration = aimParams.aimAcceleration;
+		aimMaxSpeed = aimParams.aimMaxSpeed;
+		aimMaxForce = aimParams.aimMaxForce;
+		aimGain = aimParams.aimGain;
+
+		aimLerpSpeed = aimParams.aimLerpSpeed;
+		shakynessLerpSpeed = aimParams.shakynessLerpSpeed;
+		aimDotTest = aimParams.aimDotTest;
+	}
+
+	public void OnHitBySomething(CollisionDispatch collisionDispatch) {
+		OnReactPhysically(collisionDispatch);
+	}
+
+	public void OnPiercedBySomething(CollisionDispatch collisionDispatch) {
+		BasicOnPierced(collisionDispatch);
+	}
+
+	public Transform GetBulletSpawnPos() {
+		return weapon.BulletSpawn();
+	}
+
+	public override void ExitState(NPCState nextState) {
+		base.ExitState(nextState);
+
+		if(weapon != null)
+			weapon.UnAimWeapon();
+	}
+
+	public void OnAnimatorIK(int layerIndex){
+		npc.lookAtPosition = npc.fightingAgainstTransform.position;
+		npc.useLookAt = true;
+
+		AvatarIKGoal hand;
+		weapon = npc.GetWeaponInHands(out hand);
+
+		if(weapon != null && !waitForAiming) {
+			var aimTestDir = npc.fightingAgainstTransform.position - npc.transform.position;
+			aimTestDir.y = 0;
+			aimTestDir.Normalize();
+			var targetInViewCone = Vector3.Dot(aimTestDir, npc.transform.forward) >= 0.5f;
+
+			if(targetInViewCone) {
+				if(hand == AvatarIKGoal.RightHand)
+					npc.UpdateAimingPose(true, 1, weapon);
+				else if(hand == AvatarIKGoal.LeftHand)
+					npc.UpdateAimingPose(true, -1, weapon);
+				var flatLookAtPos = npc.lookAtPosition;
+				flatLookAtPos.y = npc.transform.position.y;
+				var toLookAtFlat = (flatLookAtPos - npc.transform.position).normalized;
+
+				var lookAtPosSign = Vector3.Dot(npc.transform.right, toLookAtFlat);
+
+			    if (lookAtPosSign < 0)
+			        LookAtPosOnAnimatorIK(1f, npc.firingState.aimLerpSpeed, lookAtPosSign*-1f);
+			    else
+			        LookAtPosOnAnimatorIK(1f, npc.firingState.aimLerpSpeed, lookAtPosSign * 0.5f);
+				AimOnAnimatorIK();
+			}
+			else {
+				npc.UpdateAimingPose(false, 0, weapon);
+				LookAtPosOnAnimatorIK();
+				DontAimOnAnimatorIK();
+			}
+		}
+		else {
+			npc.UpdateAimingPose(false, 0, weapon);
+			LookAtPosOnAnimatorIK();
+			DontAimOnAnimatorIK();
+		}
+		
+		SetFootOnAnimatorIK();
+
+		if (meleeing != MeleeType.None)
+			UpdateMeleeIK(meleeing);
+		else
+			GrabOnAnimatorIK();
+	}
+
+	public override void EnterState(params object[] args) {
+		base.EnterState(args);
+
+		if(npc.rightHand == null)
+			npc.rightHand = npc.animator.GetBoneTransform(HumanBodyBones.RightHand);
+		if(npc.leftHand == null)
+			npc.leftHand = npc.animator.GetBoneTransform(HumanBodyBones.LeftHand);
+
+		var shouldAnimateEyeColor = npc.currentState != npc.suppressingState;
+		
+		if (npc.currentState != npc.suppressingState) {
+			npc.aimAngVel = Vector3.zero;
+			npc.navMeshAgent.ResetPath();
+		}
+		npc.currentState = this;
+
+		npc.fightingAgainstTransform = (Transform)args[0];
+		
+		visionObstructedStamp = Time.time + NPCBasicSecurityBot.AIM_OBSTRUCTED_DELAY; // will get overwritten below if not actually blocked
+
+		tryMoveTime = Random.Range(tryMoveTimeMin, tryMoveTimeMax) + Time.time;
+
+		shakynessT = 0;
+		npc.aimObstructedStamp = -1f;
+		npc.distressed = true;
+		npc.distressedIndex++;
+
+		waitForAiming = true;
+		AvatarIKGoal hand;
+		weapon = npc.GetWeaponInHands(out hand);
+		heldWeapon = weapon != null;
+		if (weapon == null) {
+			weapon = npc.GetWeaponInHolster();
+			if(weapon != null) {
+				if(!npc.rightShoulderIsLimp) {
+					npc.CrossFadeBusyAnimation("reacting_unholster_right", 0.15f);
+					npc.weaponShoulder = npc.rightShoulder;
+				}
+				else if(!npc.leftShoulderIsLimp) {
+					npc.CrossFadeBusyAnimation("reacting_unholster_left", 0.15f);
+					npc.weaponShoulder = npc.leftShoulder;
+				}
+			}
+		}
+		else if(hand == AvatarIKGoal.RightHand) {
+			npc.weaponShoulder = npc.rightShoulder;
+			StartAiming();
+		}
+		else if(hand == AvatarIKGoal.LeftHand) {
+			npc.weaponShoulder = npc.leftShoulder;
+			StartAiming();
+		}
+		
+		if(shouldAnimateEyeColor) {
+			if (npc.eyeCameraSequence != null && npc.eyeCameraSequence.IsPlaying()){
+				npc.eyeCameraSequence.Kill();
+			}
+			npc.eyeCameraSequence = DOTween.Sequence();
+			//npc.eyeCameraSequence.Insert(0, npc.eyeConeRenderer.materials[npc.eyeConeMaterialIndex].DOColor(eyeCameraColor, "_TintColor", 0.2f).SetEase(Ease.InOutCirc));
+			//npc.eyeCameraSequence.Insert(0, npc.eyeCameraRenderer.materials[npc.eyeCameraMaterialIndex].DOColor(eyeCameraColor, "_Color", 0.2f).SetEase(Ease.InOutCirc));
+			//if(npc.eyeFlare != null)
+				//npc.eyeCameraSequence.Insert(0, DOTween.To(() => npc.eyeFlare.color, x => npc.eyeFlare.color = x, eyeCameraColor, 0.2f).SetEase(Ease.InOutCirc));
+			if(npc.Flashlight != null)
+				npc.eyeCameraSequence.Insert(0, npc.Flashlight.DOColor(eyeCameraColor, 0.2f).SetEase(Ease.InOutCirc));
+		}
+		
+		if (npc.fightingAgainstTransform == Player.theSinglePlayer.transform) {
+			npc.haveSeenSomething = (DidSeeSomething)Mathf.Max((int)npc.haveSeenSomething, (int)DidSeeSomething.Player);
+			visionObstructedStamp = -1f;
+			seenAtPos = npc.GetUnobstructedPos(Player.theSinglePlayerID);
+			seenOriginAtPos = npc.prevPlayerOrigin;
+		}
+		else if(npc.fightingAgainstTransform == TranslocatorPad.theSinglePad.padHead) {
+			npc.haveSeenSomething = (DidSeeSomething)Mathf.Max((int)npc.haveSeenSomething, (int)DidSeeSomething.TranslocatorBall);
+			visionObstructedStamp = -1f;
+			seenAtPos = npc.GetUnobstructedPos(TranslocatorPad.padHeadID);
+			seenOriginAtPos = npc.prevMirrorOrigin;
+		}
+		else {
+			seenAtPos = npc.fightingAgainstTransform.position;
+			seenOriginAtPos = npc.fightingAgainstTransform.position;
+		}
+
+		if(weapon == null) {
+			npc.unarmedState.EnterState(npc.fightingAgainstTransform); // how did we even get here?
+			return;
+		}
+	}
+	
+	public void StartAiming() {
+		if(npc.currentState != this)
+			return;
+		waitForAiming = false;
+		if(npc.IsAiming())
+			return;
+		npc.currentAimPos = npc.weaponShoulder.position + npc.transform.forward;
+		npc.currentAimVel = Vector3.zero;
+	}
+
+	public void Awake(NPC myNPC){
+		npc = myNPC as NPCBasicSecurityBot;
+		biped = myNPC as Biped;
+		basenpc = myNPC;
+	}
+	
+	public void Update(){
+		UpdateLookPosAndWeight();
+
+		AvatarIKGoal hand;
+		var currentWeapon = npc.GetWeaponInHands(out hand);
+		bool holdingWeapon = currentWeapon != null;
+		bool droppedWeapon = weapon != null && weapon.transform.parent == null;
+		if (heldWeapon && !holdingWeapon || droppedWeapon) {
+			npc.unarmedState.EnterState(npc.fightingAgainstTransform); // lost weapon along the way
+			return;
+		}
+		if (holdingWeapon)
+			heldWeapon = true;
+	}
+	
+	void LeaveState(bool visionObstructed, bool aimObstructed) {
+		if(weapon != null)
+			weapon.UnAimWeapon();
+		var newVantagePoint = !visionObstructed && aimObstructed; // go to new vantage point if we can see target but can't aim from here
+		if (!newVantagePoint)
+			npc.guardVoice.PlayLostVisionDuringFighting();
+		npc.upsetAbout = NPCBasicSecurityBot.UpsetAboutType.Unknown;
+		if(npc.fightingAgainstTransform == Player.theSinglePlayer.transform || npc.fightingAgainstTransform == TranslocatorPad.theSinglePad.padHead)
+			npc.upsetAbout = NPCBasicSecurityBot.UpsetAboutType.Player;
+		if(newVantagePoint) {
+			npc.suppressingState.EnterState(seenAtPos, seenOriginAtPos);
+		}
+		else if(Random.value > 0.75f) {
+			npc.suppressingState.EnterState(seenAtPos, seenOriginAtPos);
+		}
+		else if(npc.fightingAgainstTransform == Player.theSinglePlayer.transform) {
+			npc.chasingState.EnterState(npc.fightingAgainstTransform.position, seenOriginAtPos); // use current pos of target, to simulate running around corner towards where target ran, kinda cheating but no one will know
+		}
+		else {
+			npc.chasingState.EnterState(seenAtPos, seenOriginAtPos);
+		}
+	}
+
+	int fightingID;
+	bool fightingAgainstPlayer;
+	bool fightingAgainstMirrorHead;
+
+	public void VisionUpdate() {
+		UpdateVisionToAll();
+		fightingAgainstPlayer = npc.fightingAgainstTransform == Player.theSinglePlayer.transform;
+		fightingAgainstMirrorHead = npc.fightingAgainstTransform == TranslocatorPad.theSinglePad.padHead;
+		if (fightingAgainstPlayer)
+			fightingID = Player.theSinglePlayerID;
+		else if (fightingAgainstMirrorHead)
+			fightingID = TranslocatorPad.padHeadID;
+		else
+			fightingID = npc.fightingAgainstTransform.gameObject.GetInstanceID();
+
+		if (!fightingAgainstPlayer && !fightingAgainstMirrorHead) {
+			UpdateVisionToObject(fightingID, npc.fightingAgainstTransform, null, true, false);
+		}
+	}
+
+	public void LateUpdate(){
+		npc.guardVoice.SetProcessing(1f);
+		var anger = npc.eyeBlock.GetFloat(NPCBasicSecurityBot.angerID);
+		anger = Mathf.Min(1f, anger + Time.deltaTime * 2f);
+		UpdateEye(1f, 1f, anger, false);
+		
+		if(Player.theSinglePlayer.health > Player.Health.Alive) {
+			//weapon.UpdateWeapon();
+			//weapon.UnAimWeapon();
+			return;
+		}
+
+		meleeing = BusyPunching(meleeing);
+		if(meleeing != MeleeType.None) {
+			StrafeMoveLocomoter(Vector3.zero, 0);
+			return;
+		}
+
+		if(!fightingAgainstPlayer) { // try see if we should switch to fighting against player
+			var visFlagsToPlayer = npc.GetVisionFlags(Player.theSinglePlayerID);
+			if (GenericPlayerInVision(visFlagsToPlayer, Player.theSinglePlayer.GetPMoveChecker())) {
+				npc.haveSeenSomething = (DidSeeSomething)Mathf.Max((int)npc.haveSeenSomething, (int)DidSeeSomething.Player);
+				npc.fightingAgainstTransform = Player.theSinglePlayer.transform;
+				fightingID = Player.theSinglePlayerID;
+				fightingAgainstPlayer = true;
+				fightingAgainstMirrorHead = false;
+			}
+		}
+		if (!fightingAgainstPlayer && !fightingAgainstMirrorHead) { // try see if we should switch to fighting against mirror head
+			var visFlagsToMirrorHead = npc.GetVisionFlags(TranslocatorPad.padHeadID);
+			if(GenericPlayerInVision(visFlagsToMirrorHead, TranslocatorPad.theSinglePad.GetHeadPMoveChecker())) {
+				npc.haveSeenSomething = (DidSeeSomething)Mathf.Max((int)npc.haveSeenSomething, (int)DidSeeSomething.TranslocatorBall);
+				npc.fightingAgainstTransform = TranslocatorPad.theSinglePad.padHead;
+				fightingID = TranslocatorPad.padHeadID;
+				fightingAgainstPlayer = false;
+				fightingAgainstMirrorHead = true;
+			}
+		}
+
+		seenAtPos = npc.GetUnobstructedPos(fightingID);
+		if(fightingAgainstPlayer)
+			seenOriginAtPos = npc.prevPlayerOrigin;
+		else if(fightingAgainstMirrorHead)
+			seenOriginAtPos = npc.prevMirrorOrigin;
+		else
+			seenOriginAtPos = seenAtPos;
+
+		var visFlagsToTarget = npc.GetVisionFlags(fightingID);
+		if(visFlagsToTarget.HasFlag(VisionToObject.UnObstructed | VisionToObject.Lit)) { // don't care about view cone for firing state, so we can quickly turn around and retarget if player teleported behind us
+			visionObstructedStamp = -1f;
+			if(visFlagsToTarget.HasFlag(VisionToObject.ThroughGlass)) {
+				npc.upsetAbout = NPCBasicSecurityBot.UpsetAboutType.Unknown;
+				if (fightingAgainstMirrorHead || fightingAgainstPlayer)
+					npc.upsetAbout = NPCBasicSecurityBot.UpsetAboutType.Player;
+				npc.chasingState.EnterState(seenAtPos, seenOriginAtPos);
+				return;
+			}
+		}
+		else if(visionObstructedStamp < 0) { // can't see no target mkay
+			visionObstructedStamp = Time.time + NPCBasicSecurityBot.AIM_OBSTRUCTED_DELAY;
+		}
+
+		var visionObstructed = visionObstructedStamp > 0 && visionObstructedStamp < Time.time;
+		var aimObstructed = npc.aimObstructedStamp > 0 && npc.aimObstructedStamp < Time.time;
+
+		if (visionObstructed || aimObstructed) {
+			LeaveState(visionObstructed, aimObstructed);
+			return;
+		}
+
+		if (Time.time > tryMoveTime) {
+			if (Random.value > 0.5f)
+				SetRandomValidTargetPos();
+			tryMoveTime = Random.Range(tryMoveTimeMin, tryMoveTimeMax) + Time.time;
+		}
+		
+		if (weapon != null && !waitForAiming) {
+			if(npc.IsAiming()) {
+				shakynessT = Mathf.Lerp(shakynessT, 1f, Time.deltaTime * shakynessLerpSpeed);
+				var shake = Mathf.Lerp(aimShakeMax, aimShakeMin, shakynessT);
+				if (fightingAgainstPlayer)
+					UpdateAimAngle(aimAcceleration, aimMaxSpeed, aimMaxForce, aimGain, shake, Player.theSinglePlayer.GetPMoveChecker(), weapon);
+				else if (fightingAgainstMirrorHead)
+					UpdateAimAngle(aimAcceleration, aimMaxSpeed, aimMaxForce, aimGain, shake, TranslocatorPad.theSinglePad.GetHeadPMoveChecker(), weapon);
+				else
+					UpdateAimAngle(aimAcceleration, aimMaxSpeed, aimMaxForce, aimGain, shake, null, weapon);
+			}
+		}
+		
+		var moveVector = npc.fightingAgainstTransform.position - npc.transform.position;
+		moveVector.y = 0;
+		var moveSqrMag = moveVector.sqrMagnitude;
+		var movingBack = false;
+
+		if(moveSqrMag < npc.unarmedState.backMoveDistance * npc.unarmedState.backMoveDistance) { // player is too close (like inside robot)
+			npc.agentCanAvoidOthers = true;
+			StrafeMoveLocomoter(npc.transform.position - moveVector.normalized * 2f, 1f, Mathf.Infinity, facePos: npc.fightingAgainstTransform.position);
+			movingBack = true;
+			npc.navMeshAgent.ResetPath();
+		}
+		else if(!npc.AnimationBusy() && moveSqrMag < npc.unarmedState.punchDistance * npc.unarmedState.punchDistance) {
+			if(npc.FacingThisWay(moveVector.normalized))
+				meleeing = TryMelee();
+			else {
+				StrafeMoveLocomoter(npc.fightingAgainstTransform.position, 0);
+				return;
+			}
+		}
+
+		if(meleeing != MeleeType.None) {
+			//StrafeMoveLocomoter(Vector3.zero, 0f);
+			return;
+		}
+
+		if(!movingBack) {
+			if(!AgentDone()) {
+				if(HandlingOffMeshLink()) {
+					npc.agentCanAvoidOthers = false;
+					StrafeMoveLocomoter(Vector3.zero, 0f);
+				}
+				else {
+					npc.agentCanAvoidOthers = true;
+					StrafeMoveLocomoter(npc.navMeshAgent.steeringTarget, 1f, facePos: seenAtPos);
+				}
+			}
+			else {
+				npc.agentCanAvoidOthers = true;
+				StrafeMoveLocomoter(seenAtPos, 0f, 40f);
+			}
+		}
+		float dot = 0;
+		
+		if(weapon != null && npc.aimWeight >= 0.5f) {
+			dot = Vector3.Dot(weapon.BulletSpawn().forward, (npc.fightingAgainstTransform.position - weapon.BulletSpawn().position).normalized);
+			if(dot > aimDotTest && weapon.TryFireWeapon()) {
+				var mag = (npc.fightingAgainstTransform.position - npc.weaponShoulder.position).magnitude;
+				mag = Mathf.Clamp(mag, 1f, 5f);
+				npc.currentAimVel += new Vector3(0, Random.Range(0.5f, 1.5f) * mag, 0);
+			}
+		}
+	}
+}

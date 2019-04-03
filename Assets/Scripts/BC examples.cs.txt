@@ -1,0 +1,77 @@
+// From Grabber.cs
+	public void ReleaseIfThingIsHeld( bool playSounds = true, bool harsh = false){
+		if( IsHolding ) {
+			thrownGrabbable = currentInteractable as Grabbable;
+			if(thrownGrabbable != null && thrownGrabbable.hideGrabberWhenHeld) {
+				handle.SetAllHiddenHack(false);
+			}
+			anim.SetBool("Grabbing", false);
+			//TODO: Stop hold-particle in ring here
+			DisableBeam();
+			if( playSounds ) {
+				grabberOneshots.SetParameter(GRABBING, 0f);
+				grabberOneshots.Play();
+			}
+			//float time = 3;
+			Vector3 vel = handle.GetVelocityAtPoint(grabOrigin.position);
+			//DebugTrajectory(previousPosition, previousVelocity, time, Color.green);
+			//DebugTrajectory(grabOrigin.position, vel, time, Color.red);
+
+			// TWO FRAME AVERAGE
+			//float t = 0.5f;
+			//Vector3 avgVel = Vector3.Slerp(previousVelocity, vel, t);
+			//Vector3 avgPos = Vector3.Lerp(previousPosition, grabOrigin.position, t);
+			//DebugTrajectory(avgPos, avgVel, time, Color.yellow);
+
+
+
+			//t = owner.releaseInterpolator;
+			//Vector3 interVel = Vector3.Slerp(previousVelocity, vel, t);
+			//Vector3 interPos = Vector3.Lerp(previousPosition, grabOrigin.position, t);
+			//DebugTrajectory(interPos, interVel, time, Color.blue);
+
+			//Vector3 i2Vel = interVel.normalized * vel.magnitude;
+			//Vector3 i2Pos = grabOrigin.position;
+			//DebugTrajectory(i2Pos, i2Vel, time, Color.cyan);
+			if(thrownGrabbable != null)
+				thrownGrabbable.EndInteract( this, vel, handle.AngularVelocity, true );
+			else
+				currentInteractable.EndInteract( this, vel, handle.AngularVelocity, true );
+			currentInteractable = null;
+			physicsFollow.enabled = false;
+			if (harsh)
+				handle.TriggerHaptics(0.3f, 0.075f);
+			else
+				handle.TriggerHaptics(0.3f, 0.01f);
+			if(gameObject.activeInHierarchy) // Just in case we're dropping an item because we're disabling the tool. Only do this if the object is active
+				StartCoroutine("ApplyAccurateVelocityNextFrame");
+		}
+	}
+
+	IEnumerator ApplyAccurateVelocityNextFrame() {
+
+		if ( thrownGrabbable == null )
+			yield break;
+		if(thrownGrabbable.type == Grabbable.Type.Heavy)
+			yield break;
+
+		yield return new WaitForFixedUpdate(); // Wait one physics frame
+
+		// Needed for cookies for some reason (:
+		if ( thrownGrabbable.rb == null )
+			yield break;
+
+		// Average velocities
+		Vector3 vel = handle.GetVelocityAtPoint(grabOrigin.position) + previousVelocity + previouserVelocity;
+		vel /= 3;
+		Vector3 vDir = vel.normalized;
+		float cMag = thrownGrabbable.rb.velocity.magnitude;
+		Vector3 actualVel = vDir * cMag;
+		Vector3 correctedPos = thrownGrabbable.transform.position + actualVel * Time.fixedDeltaTime; // Since one frame has passed
+		thrownGrabbable.transform.position = correctedPos;
+		thrownGrabbable.rb.velocity = actualVel;
+	}
+
+
+
+// From PhysicsFollow.cs

@@ -1,0 +1,150 @@
+	
+	// No early out version
+	public bool Touches(2DPrimitive other) {
+		if(PrimitiveType == Primitive.BOX && other.PrimitiveType == Primitive.BOX) {
+			Vector2 blPos = transform.TransformPoint(box.BlPos);
+			Vector2 brPos = transform.TransformPoint(box.BrPos);
+			Vector2 tlPos = transform.TransformPoint(box.TlPos);
+			Vector2 trPos = transform.TransformPoint(box.TrPos);
+
+			Vector2 otherBlPos = other.transform.TransformPoint(other.box.BlPos);
+			Vector2 otherBrPos = other.transform.TransformPoint(other.box.BrPos);
+			Vector2 otherTlPos = other.transform.TransformPoint(other.box.TlPos);
+			Vector2 otherTrPos = other.transform.TransformPoint(other.box.TrPos);
+
+			if(other.box.Contains(other.transform.InverseTransformPoint(blPos))) {
+				return true;
+			}
+			if(other.box.Contains(other.transform.InverseTransformPoint(brPos))) {
+				return true;
+			}
+			if(other.box.Contains(other.transform.InverseTransformPoint(tlPos))) {
+				return true;
+			}
+			if(other.box.Contains(other.transform.InverseTransformPoint(trPos))) {
+				return true;
+			}
+
+			if(box.Contains(transform.InverseTransformPoint(otherBlPos))) {
+				return true;
+			}
+			if(box.Contains(transform.InverseTransformPoint(otherBrPos))) {
+				return true;
+			}
+			if(box.Contains(transform.InverseTransformPoint(otherTlPos))) {
+				return true;
+			}
+			if(box.Contains(transform.InverseTransformPoint(otherTrPos))) {
+				return true;
+			}
+			
+			// lots of line segment intersection tests here
+
+			return false;
+		}
+
+		// Other types of tests
+
+		return false;
+	}
+	
+
+
+	// Shipped version
+	public bool Touches(2DPrimitive other) {
+		if(PrimitiveType == Primitive.BOX && other.PrimitiveType == Primitive.BOX) {
+			Vector2 blPos = transform.TransformPoint(box.BlPos);
+			Vector2 brPos = transform.TransformPoint(box.BrPos);
+			Vector2 tlPos = transform.TransformPoint(box.TlPos);
+			Vector2 trPos = transform.TransformPoint(box.TrPos);
+
+			if(other.box.Contains(other.transform.InverseTransformPoint(blPos))) {
+				return true;
+			}
+			if(other.box.Contains(other.transform.InverseTransformPoint(brPos))) {
+				return true;
+			}
+			if(other.box.Contains(other.transform.InverseTransformPoint(tlPos))) {
+				return true;
+			}
+			if(other.box.Contains(other.transform.InverseTransformPoint(trPos))) {
+				return true;
+			}
+
+			Vector2 otherBlPos = other.transform.TransformPoint(other.box.BlPos);
+			Vector2 otherBrPos = other.transform.TransformPoint(other.box.BrPos);
+			Vector2 otherTlPos = other.transform.TransformPoint(other.box.TlPos);
+			Vector2 otherTrPos = other.transform.TransformPoint(other.box.TrPos);
+
+			if(box.Contains(transform.InverseTransformPoint(otherBlPos))) {
+				return true;
+			}
+			if(box.Contains(transform.InverseTransformPoint(otherBrPos))) {
+				return true;
+			}
+			if(box.Contains(transform.InverseTransformPoint(otherTlPos))) {
+				return true;
+			}
+			if(box.Contains(transform.InverseTransformPoint(otherTrPos))) {
+				return true;
+			}
+			
+			// lots of line segment intersection tests here
+
+			return false;
+		}
+
+		// Other types of tests
+
+		return false;
+	}
+
+
+
+
+	// Even faster version
+	public bool Touches(2DPrimitive other) {
+		if(PrimitiveType == Primitive.BOX && other.PrimitiveType == Primitive.BOX) {
+			Vector2 blPos = transform.TransformPoint(box.BlPos);
+			if(other.box.Contains(other.transform.InverseTransformPoint(blPos))) {
+				return true;
+			}
+			Vector2 brPos = transform.TransformPoint(box.BrPos);
+			if(other.box.Contains(other.transform.InverseTransformPoint(brPos))) {
+				return true;
+			}
+			Vector2 tlPos = transform.TransformPoint(box.TlPos);
+			if(other.box.Contains(other.transform.InverseTransformPoint(tlPos))) {
+				return true;
+			}
+			Vector2 trPos = transform.TransformPoint(box.TrPos);
+			if(other.box.Contains(other.transform.InverseTransformPoint(trPos))) {
+				return true;
+			}
+
+			Vector2 otherBlPos = other.transform.TransformPoint(other.box.BlPos);
+			if(box.Contains(transform.InverseTransformPoint(otherBlPos))) {
+				return true;
+			}
+			Vector2 otherBrPos = other.transform.TransformPoint(other.box.BrPos);
+			if(box.Contains(transform.InverseTransformPoint(otherBrPos))) {
+				return true;
+			}
+			Vector2 otherTlPos = other.transform.TransformPoint(other.box.TlPos);
+			if(box.Contains(transform.InverseTransformPoint(otherTlPos))) {
+				return true;
+			}
+			Vector2 otherTrPos = other.transform.TransformPoint(other.box.TrPos);
+			if(box.Contains(transform.InverseTransformPoint(otherTrPos))) {
+				return true;
+			}
+
+			// lots of line segment intersection tests here
+
+			return false;
+		}
+
+		// Other types of tests
+
+		return false;
+	}
