@@ -5,6 +5,18 @@ public class DecalController : MonoBehaviour
 {
     public static DecalController SharedInstance;
 
+    List<Matrix4x4> transformList = new List<Matrix4x4>();
+
+    [SerializeField]
+    Mesh decalMesh;
+    [SerializeField]
+    MeshFilter quadFilter;
+    [SerializeField]
+    Material decalMaterial;
+
+   public float offset = 0.1f;
+
+
     [SerializeField]
     [Tooltip("The prefab for the bullet hole")]
     private GameObject bulletHoleDecalPrefab;
@@ -42,12 +54,22 @@ public class DecalController : MonoBehaviour
         spawned.SetActive(false);
     }
 
-    public void SpawnDecal(RaycastHit hit)
+    public void SpawnDecal(Vector3 rayDirection, RaycastHit hit)
     {
+        Matrix4x4 matrix = new Matrix4x4();
+
+       
+
         GameObject decal = GetNextAvailableDecal();
         if (decal != null)
         {
-            decal.transform.position = hit.point;
+            Vector3 offsetPoint = hit.point - rayDirection.normalized * offset;
+
+            matrix.SetTRS(offsetPoint, Quaternion.FromToRotation(-Vector3.forward, hit.normal), Vector3.one);
+
+            transformList.Add(matrix);
+
+            decal.transform.position = offsetPoint;
             decal.transform.rotation = Quaternion.FromToRotation(-Vector3.forward, hit.normal);
 
             decal.SetActive(true);
@@ -65,15 +87,17 @@ public class DecalController : MonoBehaviour
         return oldestActiveDecal;
     }
 
-#if UNITY_EDITOR
-
     private void Update()
     {
+        Graphics.DrawMeshInstanced(decalMesh, 0, decalMaterial, transformList);
+
         if (transform.childCount < maxConcurrentDecals)
             InstantiateDecal();
         else if (ShoudlRemoveDecal())
             DestroyExtraDecal();
     }
+
+#if UNITY_EDITOR
 
     private bool ShoudlRemoveDecal()
     {

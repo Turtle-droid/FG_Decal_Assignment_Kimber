@@ -1,4 +1,4 @@
-﻿Shader "BlendedDecal"
+﻿Shader "Custom/BlendedDecal"
 {
 	Properties
 	{

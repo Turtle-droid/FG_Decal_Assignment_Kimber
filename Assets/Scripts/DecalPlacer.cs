@@ -22,14 +22,16 @@ public class DecalPlacer : MonoBehaviour
             Ray ray = Camera.main.ScreenPointToRay(Input.mousePosition);
             if (Physics.Raycast(ray, out hitInfo))
             {
-                SpawnDecal(hitInfo);
+                SpawnDecal(ray.direction, hitInfo);
             }
         }
     }
 
-    void SpawnDecal(RaycastHit hitInfo)
+    void SpawnDecal(Vector3 rayDirection, RaycastHit hitInfo)
     {
-        DecalController.SharedInstance.SpawnDecal(hitInfo);
+        //DecalController.SharedInstance.SpawnDecal(rayDirection, hitInfo);
+
+        InstancedDecalController.SharedInstance.SpawnDecal(rayDirection, hitInfo);
         //var decal = Instantiate(decalPrefab);     
         //decal.transform.position = hitInfo.point;
         //decal.transform.forward = hitInfo.normal * -1f;
