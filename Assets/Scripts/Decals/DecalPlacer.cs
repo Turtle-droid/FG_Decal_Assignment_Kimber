@@ -25,7 +25,6 @@ public class DecalPlacer : MonoBehaviour
 
     void SpawnDecal(Vector3 rayDirection, RaycastHit hitInfo)
     {
-
         // Depending on bool try call either of the DecalController variants
         if (!useInstancedDecals)
         {
