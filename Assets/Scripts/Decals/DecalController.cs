@@ -20,9 +20,6 @@ public class DecalController : MonoBehaviour
     // Pool Queue
     private Queue<GameObject> decalPoolQueue;
 
-    // Active decals Queue
-    private Queue<GameObject> activeDecalsQueue;
-
     private void Awake()
     {
         InitializeDecals();
@@ -33,7 +30,6 @@ public class DecalController : MonoBehaviour
     private void InitializeDecals()
     {
         decalPoolQueue = new Queue<GameObject>();
-        activeDecalsQueue = new Queue<GameObject>();
 
         // Call function to populate que with decals
         for (int i = 0; i < maxNumberOfDecals; i++)
@@ -69,23 +65,15 @@ public class DecalController : MonoBehaviour
 
             //Activate decal and place it in the active queue
             decal.SetActive(true);
-            activeDecalsQueue.Enqueue(decal);
+            decalPoolQueue.Enqueue(decal);
         }
     }
 
     //Function to fetch a decal to use in spawning
     private GameObject GetNextAvailableDecal()
-    {
-        // Use pool if available
-        if (decalPoolQueue.Count > 0)
-            return decalPoolQueue.Dequeue();
-
-        // Reuse active ones once we run out
-        var oldestActiveDecal = activeDecalsQueue.Dequeue();
-        return oldestActiveDecal;
+    {   
+          return decalPoolQueue.Dequeue();
     }
-
-#if UNITY_EDITOR
 
     private void Update()
     {
@@ -102,11 +90,6 @@ public class DecalController : MonoBehaviour
 
     private void DestroyExtraDecal()
     {
-        if (decalPoolQueue.Count > 0)
-            Destroy(decalPoolQueue.Dequeue());
-        else if (ShoudlRemoveDecal() && activeDecalsQueue.Count > 0)
-            Destroy(activeDecalsQueue.Dequeue());
+          Destroy(decalPoolQueue.Dequeue());
     }
-
-#endif
 }

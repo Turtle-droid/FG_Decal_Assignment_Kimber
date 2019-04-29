@@ -19,8 +19,10 @@ public class InstancedDecalController : MonoBehaviour
     [Tooltip("Maximum number of decals before they will start being reused")]
     private int maxNumberOfDecals = 10;
 
+    private int currentIndex = 0;
+
     // Queue of matrixes for determining decal transforms
-    private Queue<Matrix4x4> matrixQueue;
+    private Matrix4x4[] matrixArray;    
 
     private void Awake()
     {
@@ -31,20 +33,20 @@ public class InstancedDecalController : MonoBehaviour
     // Initalize our Queue 
     private void InitializeDecals()
     {
-        matrixQueue = new Queue<Matrix4x4>();
+        matrixArray = new Matrix4x4[maxNumberOfDecals];
 
         for (int i = 0; i < maxNumberOfDecals; i++)
         {
-            InstantiateDecal();
+            InstantiateDecal(i);
         }
     }
 
     // Fill Queue with matrixes at level origin
-    private void InstantiateDecal()
+    private void InstantiateDecal(int index)
     {
         Matrix4x4 matrix = new Matrix4x4();
         matrix.SetTRS(Vector3.zero, Quaternion.Euler(Vector3.zero), Vector3.one);
-        matrixQueue.Enqueue(matrix);
+        matrixArray[index] = matrix;
     }
 
     // Spawn decals or rather change matrix transform
@@ -61,40 +63,37 @@ public class InstancedDecalController : MonoBehaviour
             // Set matrix transform
             matrix.SetTRS(offsetPoint, Quaternion.FromToRotation(-Vector3.forward, hit.normal), Vector3.one);
 
+            Debug.Log("Current Index: " + currentIndex);
+
             // Place in Queue
-            matrixQueue.Enqueue(matrix);
+            matrixArray[currentIndex] = matrix;
+
+            currentIndex += 1;
+
+            if (currentIndex >= maxNumberOfDecals)
+            {
+                currentIndex = 0;
+            }
         }
     }
 
     //Function to fetch oldest matrix to use in drawing
     private Matrix4x4 GetNextAvailableMatrix ()
     {
-        return matrixQueue.Dequeue();
+        return matrixArray[currentIndex];
     }
 
     private void Update()
     {
         // Draw decals using DrawMeshInstanced based on our matrix queue
-        Graphics.DrawMeshInstanced(decalMesh, 0, decalMaterial, matrixQueue.ToArray());
+        Graphics.DrawMeshInstanced(decalMesh, 0, decalMaterial, matrixArray);
 
-        if (matrixQueue.Count < maxNumberOfDecals)
-            InstantiateDecal();
-
-        else if (ShoudlRemoveDecal())
-                 RemoveExtraDecal();
+        if (matrixArray.Length < maxNumberOfDecals)
+        {
+            for (int i = matrixArray.Length; i < maxNumberOfDecals; i++)
+            {
+                InstantiateDecal(i);
+            }
+        }            
     }
-
-#if UNITY_EDITOR
-
-    private bool ShoudlRemoveDecal()
-    {
-        return matrixQueue.Count > maxNumberOfDecals;
-    }
-
-    private void RemoveExtraDecal()
-    {
-         matrixQueue.Dequeue();      
-    }
-
-#endif
 }
