@@ -52,21 +52,15 @@ public class InstancedDecalController : MonoBehaviour
     // Spawn decals or rather change matrix transform
     public void SpawnDecal(Vector3 rayDirection, RaycastHit hit)
     {
-        // Get oldest available matrix
-        Matrix4x4 matrix = GetNextAvailableMatrix();
-
-        if (matrix != null)
+        if (matrixArray[currentIndex] != null)
         {
             //Offset spawnpoint in order to avoid z-fighting
             Vector3 offsetPoint = hit.point - rayDirection.normalized * offset;
 
             // Set matrix transform
-            matrix.SetTRS(offsetPoint, Quaternion.FromToRotation(-Vector3.forward, hit.normal), Vector3.one);
+            matrixArray[currentIndex].SetTRS(offsetPoint, Quaternion.FromToRotation(-Vector3.forward, hit.normal), Vector3.one);
 
             Debug.Log("Current Index: " + currentIndex);
-
-            // Place in Queue
-            matrixArray[currentIndex] = matrix;
 
             currentIndex += 1;
 
@@ -75,12 +69,6 @@ public class InstancedDecalController : MonoBehaviour
                 currentIndex = 0;
             }
         }
-    }
-
-    //Function to fetch oldest matrix to use in drawing
-    private Matrix4x4 GetNextAvailableMatrix ()
-    {
-        return matrixArray[currentIndex];
     }
 
     private void Update()
