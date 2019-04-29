@@ -7,7 +7,8 @@ public class InstancedDecalController : MonoBehaviour
     public static InstancedDecalController SharedInstance;
 
     //Offset for decal placement
-    public float offset = 0.1f;
+    [SerializeField]
+    private float offset = 0.1f;
 
     // The decal mesh and material
     [SerializeField]
@@ -17,6 +18,7 @@ public class InstancedDecalController : MonoBehaviour
 
     [SerializeField]
     [Tooltip("Maximum number of decals before they will start being reused")]
+    [Range(0, 1000)]
     private int maxNumberOfDecals = 10;
 
     private int currentIndex = 0;
@@ -74,14 +76,6 @@ public class InstancedDecalController : MonoBehaviour
     private void Update()
     {
         // Draw decals using DrawMeshInstanced based on our matrix queue
-        Graphics.DrawMeshInstanced(decalMesh, 0, decalMaterial, matrixArray);
-
-        if (matrixArray.Length < maxNumberOfDecals)
-        {
-            for (int i = matrixArray.Length; i < maxNumberOfDecals; i++)
-            {
-                InstantiateDecal(i);
-            }
-        }            
+        Graphics.DrawMeshInstanced(decalMesh, 0, decalMaterial, matrixArray);          
     }
 }

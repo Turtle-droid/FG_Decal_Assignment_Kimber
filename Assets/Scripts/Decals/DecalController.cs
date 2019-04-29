@@ -7,7 +7,8 @@ public class DecalController : MonoBehaviour
     public static DecalController SharedInstance;
 
     //Offset for decal placement
-    public float offset = 0.1f;
+    [SerializeField]
+    private float offset = 0.1f;
 
     [SerializeField]
     [Tooltip("The prefab for the bullet hole")]
@@ -15,6 +16,7 @@ public class DecalController : MonoBehaviour
 
     [SerializeField]
     [Tooltip("Maximum number of decals before they will start being reused")]
+    [Range(0, 1000)]
     private int maxNumberOfDecals = 10;
 
     // Pool Queue
