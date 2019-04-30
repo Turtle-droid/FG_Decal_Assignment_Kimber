@@ -69,6 +69,7 @@ public class InstancedDecalController : MonoBehaviour
             if (currentIndex >= maxNumberOfDecals)
             {
                 currentIndex = 0;
+
             }
         }
     }
